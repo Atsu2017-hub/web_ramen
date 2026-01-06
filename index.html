@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本格ラーメン屋 - こだわりの一杯</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js" defer></script>
+    <script src="script.js" defer></script>
+    <script type="module" src="src/chatkit.js"></script>
+    <script type="module" src="src/auth-ui.js"></script>
+    <script type="module" src="src/reservation-ui.js"></script>
+
+</head>
+<body>
+    <!-- ナビゲーション -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">🍜 本格ラーメン屋</div>
+            <ul class="nav-menu">
+                <li><a href="#home" class="nav-link">ホーム</a></li>
+                <li><a href="#menu" class="nav-link">メニュー</a></li>
+                <li><a href="#about" class="nav-link">当店について</a></li>
+                <li><a href="#access" class="nav-link">アクセス</a></li>
+                <li><a href="#reservation" class="nav-link">予約</a></li>
+                <li><a href="#chat" class="nav-link">チャット</a></li>
+            </ul>
+            <div class="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ヒーローセクション -->
+    <section id="home" class="hero">
+        <div class="hero-overlay"></div>
+        <div class="hero-content">
+            <h1 class="hero-title">こだわりの一杯</h1>
+            <p class="hero-subtitle">職人が心を込めて作る本格ラーメン</p>
+            <a href="#menu" class="btn btn-primary">メニューを見る</a>
+        </div>
+    </section>
+
+    <!-- メニューセクション -->
+    <section id="menu" class="menu">
+        <div class="container">
+            <h2 class="section-title">メニュー</h2>
+            <p class="section-subtitle">厳選された素材で作る自慢の料理</p>
+            
+            <div class="menu-grid">
+                <div class="menu-item" data-aos="fade-up">
+                    <div class="menu-image">
+                        <img src="画像/ramen.png" alt="本格ラーメン">
+                    </div>
+                    <div class="menu-content">
+                        <h3>本格ラーメン</h3>
+                        <p>長時間煮込んだ濃厚スープと、こだわりの麺が自慢の一杯。チャーシュー、味玉、ネギがたっぷりと盛り付けられています。</p>
+                        <span class="price">¥850</span>
+                    </div>
+                </div>
+
+                <div class="menu-item" data-aos="fade-up" data-aos-delay="100">
+                    <div class="menu-image">
+                        <img src="画像/don.png" alt="特製丼">
+                    </div>
+                    <div class="menu-content">
+                        <h3>特製丼</h3>
+                        <p>ボリューム満点の特製丼。ご飯の上にたっぷりの具材をのせた、満足感のある一品です。</p>
+                        <span class="price">¥750</span>
+                    </div>
+                </div>
+
+                <div class="menu-item" data-aos="fade-up" data-aos-delay="200">
+                    <div class="menu-image">
+                        <img src="画像/karaage.png" alt="唐揚げ">
+                    </div>
+                    <div class="menu-content">
+                        <h3>特製唐揚げ</h3>
+                        <p>ジューシーでサクサクの特製唐揚げ。秘伝のタレで味付けした、絶品サイドメニューです。</p>
+                        <span class="price">¥550</span>
+                    </div>
+                </div>
+
+                <div class="menu-item" data-aos="fade-up" data-aos-delay="300">
+                    <div class="menu-image">
+                        <img src="画像/cola.png" alt="ドリンク">
+                    </div>
+                    <div class="menu-content">
+                        <h3>ドリンク</h3>
+                        <p>コーラ、オレンジジュース、お茶など、各種ドリンクをご用意しています。</p>
+                        <span class="price">¥200</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 当店について -->
+    <section id="about" class="about">
+        <div class="container">
+            <div class="about-content">
+                <div class="about-text" data-aos="fade-right">
+                    <h2 class="section-title">当店について</h2>
+                    <p class="about-description">
+                        私たちは、伝統的な製法を守りながら、現代の味覚にも合う本格的なラーメンを提供しています。
+                        スープは毎日朝から時間をかけて丁寧に煮込み、麺は厳選された小麦粉を使用して打ち立てています。
+                    </p>
+                    <p class="about-description">
+                        一つ一つの料理に職人の想いを込めて、お客様に最高の一杯をお届けすることを心がけています。
+                        温かく、居心地の良い空間で、心も体も温まる時間をお過ごしください。
+                    </p>
+                    <div class="features">
+                        <div class="feature">
+                            <span class="feature-icon">🍜</span>
+                            <h4>こだわりのスープ</h4>
+                            <p>長時間煮込んだ濃厚なスープ</p>
+                        </div>
+                        <div class="feature">
+                            <span class="feature-icon">🥢</span>
+                            <h4>手打ち麺</h4>
+                            <p>厳選素材で作る打ち立て麺</p>
+                        </div>
+                        <div class="feature">
+                            <span class="feature-icon">❤️</span>
+                            <h4>心を込めて</h4>
+                            <p>一つ一つ丁寧に作ります</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="about-image" data-aos="fade-left">
+                    <img src="画像/ramen.png" alt="当店のラーメン">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- アクセス -->
+    <section id="access" class="access">
+        <div class="container">
+            <h2 class="section-title">アクセス</h2>
+            <div class="access-content">
+                <div class="access-info" data-aos="fade-up">
+                    <div class="info-item">
+                        <h3>📍 住所</h3>
+                        <p>〒123-4567<br>東京都渋谷区ラーメン通り1-2-3</p>
+                    </div>
+                    <div class="info-item">
+                        <h3>🚇 最寄り駅</h3>
+                        <p>JR渋谷駅 徒歩5分<br>東京メトロ渋谷駅 徒歩3分</p>
+                    </div>
+                    <div class="info-item">
+                        <h3>🕐 営業時間</h3>
+                        <p>月曜日〜金曜日: 11:00 - 22:00<br>土曜日・日曜日: 11:00 - 23:00</p>
+                    </div>
+                    <div class="info-item">
+                        <h3>📞 お問い合わせ</h3>
+                        <p>TEL: 03-1234-5678</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ログイン・予約セクション -->
+    <section id="reservation" class="reservation-section">
+        <div class="container">
+            <h2 class="section-title">予約</h2>
+            
+            <!-- ユーザー情報表示エリア -->
+            <div id="user-info" class="user-info"></div> <!-- ログインしている場合に表示 -->
+            
+            <!-- ログインフォーム -->
+            <div id="login-form" class="auth-form">
+                <h3>ログイン</h3>
+                <form> 
+                    <div class="form-group">
+                        <label for="login-email">メールアドレス</label>
+                        <input type="email" id="login-email" required> <!-- name属性を追加 -->
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">パスワード</label>
+                        <input type="password" id="login-password" required> <!-- name属性を追加 -->
+                    </div>
+                    <div id="login-error" class="error-message" style="display: none;"></div>
+                    <button type="submit" class="btn btn-primary">ログイン</button>
+                    <p class="form-switch">
+                        アカウントをお持ちでない方は
+                        <a href="#" id="show-register">こちらから登録</a>
+                    </p>
+                </form>
+            </div>
+            
+            <!-- 登録フォーム -->
+            <div id="register-form" class="auth-form" style="display: none;">
+                <h3>新規登録</h3>
+                <form>
+                    <div class="form-group">
+                        <label for="register-name">お名前</label>
+                        <input type="text" id="register-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="register-email">メールアドレス</label>
+                        <input type="email" id="register-email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="register-password">パスワード</label>
+                        <input type="password" id="register-password" required>
+                    </div>
+                    <div id="register-error" class="error-message" style="display: none;"></div>
+                    <button type="submit" class="btn btn-primary">登録</button>
+                    <p class="form-switch">
+                        既にアカウントをお持ちの方は
+                        <a href="#" id="show-login">こちらからログイン</a>
+                    </p>
+                </form>
+            </div>
+            
+            <!-- 予約フォーム（ログイン時のみ表示） -->
+            <div id="reservation-section" class="reservation-form-section" style="display: none;">
+                <h3>予約フォーム</h3>
+                <form id="reservation-form">
+                    <div class="form-group">
+                        <label for="reservation-date">予約日</label>
+                        <input type="date" id="reservation-date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reservation-time">予約時間</label>
+                        <input type="time" id="reservation-time" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reservation-people">人数</label>
+                        <input type="number" id="reservation-people" min="1" max="10" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reservation-requests">特別な要望（任意）</label>
+                        <textarea id="reservation-requests" rows="3"></textarea>
+                    </div>
+                    <div id="reservation-error" class="error-message" style="display: none;"></div>
+                    <div id="reservation-success" class="success-message" style="display: none;"></div>
+                    <button type="submit" class="btn btn-primary">予約する</button>
+                </form>
+                
+                <!-- 予約一覧 -->
+                <div class="reservations-list-section">
+                    <h3>予約一覧</h3>
+                    <div id="reservations-list"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ChatKit Demo -->
+    <section id="chat" class="chat-section">
+        <div class="container">
+            <h1>大将による質問対応</h1>
+            <openai-chatkit id="my-chat"></openai-chatkit>
+        </div>
+    </section>
+
+    <!-- フッター -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 本格ラーメン屋. All rights reserved.</p>
+        </div>
+    </footer>
+
+    
+</body>
+</html>
+
