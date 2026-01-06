@@ -1,7 +1,7 @@
 # Slack通知機能を実装するモジュール
 # Slack Webhookを使用して予約の決定・キャンセルを通知
 
-import requests  # pyright: ignore[reportMissingImports]
+import requests  # pyright: ignore[reportMissingImports, reportMissingModuleSource]
 from typing import Dict, Optional  # pyright: ignore[reportMissingImports]
 import os  # pyright: ignore[reportMissingImports]
 from dotenv import load_dotenv  # pyright: ignore[reportMissingImports]
@@ -92,7 +92,8 @@ def notify_reservation_confirmed(
     reservation_date: str,
     reservation_time: str,
     number_of_people: int,
-    special_requests: Optional[str] = None
+    special_requests: Optional[str] = None,
+    menu_items: Optional[list] = None,
 ) -> bool:
     """
     予約決定（作成）をSlackに通知する関数
@@ -105,6 +106,7 @@ def notify_reservation_confirmed(
         reservation_time: 予約時間（HH:MM:SS形式）
         number_of_people: 人数
         special_requests: 特別な要望（オプション）
+        menu_items: 予約したメニュー一覧（例: [{\"name\": str, \"quantity\": int, \"price\": int}]）
     
     Returns:
         bool: 送信成功時True、失敗時False
@@ -150,6 +152,27 @@ def notify_reservation_confirmed(
             ]
         }
     ]
+    
+    # メニュー情報がある場合は追加
+    if menu_items:
+        lines = []
+        for item in menu_items:
+            name = item.get("name", "不明なメニュー")
+            quantity = item.get("quantity", 1)
+            price = item.get("price")
+            if price is not None:
+                subtotal = price * quantity
+                lines.append(f"- {name} × {quantity}個 (¥{subtotal:,})")
+            else:
+                lines.append(f"- {name} × {quantity}個")
+
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": "*注文メニュー:*\n" + "\n".join(lines)
+            }
+        })
     
     # 特別な要望がある場合は追加
     if special_requests:

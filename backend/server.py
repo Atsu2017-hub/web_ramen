@@ -8,10 +8,11 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials  # pyright
 from openai import OpenAI  # pyright: ignore[reportMissingImports]
 from fastapi.middleware.cors import CORSMiddleware  # pyright: ignore[reportMissingImports]
 from pydantic import BaseModel, EmailStr  # pyright: ignore[reportMissingImports]
-from typing import Any, Dict, Optional  # pyright: ignore[reportMissingImports]
+from typing import Any, Dict, Optional, List  # pyright: ignore[reportMissingImports]
 from datetime import date, time  # pyright: ignore[reportMissingImports]
 import os  # pyright: ignore[reportMissingImports]
 from dotenv import load_dotenv  # pyright: ignore[reportMissingImports]
+import stripe  # pyright: ignore[reportMissingImports]
 
 # 認証とデータベース関連のモジュールをインポート
 from auth import (
@@ -40,6 +41,10 @@ app.add_middleware(
 
 # OpenAIのインスタンスを作成。OpenAIのAPIキーを環境変数から取得。
 openai = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
+# StripeのAPIキーを環境変数から取得して設定
+# Stripe API: 決済処理を行うためのAPI。秘密鍵（sk_で始まる）をサーバー側で使用
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 
 # HTTPBearerを使用してJWTトークンの認証を行う
 security = HTTPBearer()
@@ -71,12 +76,19 @@ class UserLogin(BaseModel):
     email: EmailStr  # メールアドレス
     password: str  # パスワード
 
+# メニューアイテム用のリクエストモデル
+class MenuItemRequest(BaseModel):
+    menu_id: int  # メニューID
+    quantity: int  # 数量
+
 # 予約作成用のリクエストモデル
 class ReservationCreate(BaseModel):
     reservation_date: date  # 予約日
     reservation_time: str  # 予約時間（文字列形式、例: "18:00"）
     number_of_people: int  # 人数
     special_requests: Optional[str] = None  # 特別な要望（任意）
+    menu_items: Optional[List[MenuItemRequest]] = []  # 選択されたメニューアイテム
+    payment_intent_id: Optional[str] = None  # StripeのPayment Intent ID
 
 # 現在のユーザーを取得する依存関数。security(HttpBearerの返り値)を指定すると、Authorizarionヘッダーを見て、Bearer <token>の形式か判断し取り出す。
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
@@ -252,6 +264,295 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     """
     return current_user
 
+# ========== メニュー関連のAPIエンドポイント ==========
+
+@app.get("/api/stripe/publishable-key")
+async def get_stripe_publishable_key():
+    """
+    Stripe公開可能キーを取得するエンドポイント
+    
+    Stripe API: クライアント側でStripe.jsを使用する際に必要な公開可能キー（pk_で始まる）
+    を返す。秘密鍵（sk_で始まる）とは異なり、クライアント側に公開しても安全。
+    
+    Returns:
+        dict: Stripe公開可能キー
+    """
+    publishable_key = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
+    if not publishable_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Stripe公開可能キーが設定されていません"
+        )
+    return {"publishable_key": publishable_key}
+
+
+@app.get("/api/menus")
+async def get_menus():
+    """
+    利用可能なメニュー一覧を取得するエンドポイント
+    
+    Returns:
+        list: メニュー一覧
+    """
+    conn = get_db_connection()
+    cursor = get_db_cursor(conn)
+    
+    try:
+        cursor.execute(
+            """
+            SELECT id, name, description, price, image_url, is_available
+            FROM menus
+            WHERE is_available = TRUE
+            ORDER BY id
+            """
+        )
+        menus = cursor.fetchall()
+        return [dict(menu) for menu in menus]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"メニューの取得に失敗しました: {str(e)}"
+        )
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# ========== 決済関連のAPIエンドポイント ==========
+
+@app.post("/api/payments/create-intent")
+async def create_payment_intent(
+    menu_items: List[MenuItemRequest],
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Stripe Payment Intentを作成するエンドポイント
+    
+    Payment Intent: Stripeの決済処理を開始するためのオブジェクト。
+    クライアント側でStripe.jsを使用して決済を完了させるために必要。
+    
+    Args:
+        menu_items: 選択されたメニューアイテムのリスト
+        current_user: 認証されたユーザー情報
+    
+    Returns:
+        dict: Payment Intent情報（client_secretを含む）
+    """
+    if not stripe.api_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Stripe APIキーが設定されていません"
+        )
+    
+    conn = get_db_connection()
+    cursor = get_db_cursor(conn)
+    
+    try:
+        # メニュー情報を取得して合計金額を計算
+        total_amount = 0
+        menu_ids = [item.menu_id for item in menu_items]
+        
+        if not menu_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="メニューが選択されていません"
+            )
+        
+        # メニュー情報を取得
+        placeholders = ','.join(['%s'] * len(menu_ids))
+        cursor.execute(
+            f"""
+            SELECT id, name, price, is_available
+            FROM menus
+            WHERE id IN ({placeholders})
+            """,
+            menu_ids
+        )
+        # id: メニュー情報
+        menus = {menu['id']: menu for menu in cursor.fetchall()}
+        
+        # 合計金額を計算
+        for item in menu_items:
+            if item.menu_id not in menus:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"メニューID {item.menu_id} が見つかりません"
+                )
+            if not menus[item.menu_id]['is_available']:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"メニュー「{menus[item.menu_id]['name']}」は現在利用できません"
+                )
+            total_amount += menus[item.menu_id]['price'] * item.quantity
+        
+        if total_amount <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="合計金額が0円以下です"
+            )
+        
+        # Stripe Payment Intentを作成
+        # amountは最小通貨単位（日本円の場合は円単位）
+        # currency: 通貨コード（'jpy'は日本円）
+        # automatic_payment_methods: 利用可能な決済方法を自動で有効化（PaymentElement向け）
+        # metadata: 追加情報（ユーザーIDやメニュー情報などを保存可能）
+        payment_intent = stripe.PaymentIntent.create(
+            amount=total_amount,  # 金額（日本円の場合は円単位）
+            currency='jpy',  # 通貨コード
+            automatic_payment_methods={
+                'enabled': True,
+            },
+            metadata={
+                'user_id': str(current_user['id']),
+                'user_email': current_user['email']
+            }
+        )
+        
+        # client_secret: クライアント側でStripe.jsを使用して決済を完了させるために必要な秘密鍵
+        return {
+            'client_secret': payment_intent.client_secret, #必須
+            'payment_intent_id': payment_intent.id,
+            'amount': total_amount
+        }
+    except stripe.error.StripeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Stripeエラー: {str(e)}"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Payment Intentの作成に失敗しました: {str(e)}"
+        )
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@app.post("/api/payments/refund/{payment_intent_id}")
+async def refund_payment(
+    payment_intent_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    決済を返金するエンドポイント
+    
+    Refund: Stripeで既に決済完了したPayment Intentを返金する処理。
+    返金は全額返金のみ（部分返金も可能だが、ここでは全額返金のみ実装）。
+    
+    Args:
+        payment_intent_id: StripeのPayment Intent ID
+        current_user: 認証されたユーザー情報
+    
+    Returns:
+        dict: 返金情報
+    """
+    if not stripe.api_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Stripe APIキーが設定されていません"
+        )
+    
+    conn = get_db_connection()
+    cursor = get_db_cursor(conn)
+    
+    try:
+        # 予約が存在し、ユーザーが所有しているか確認
+        cursor.execute(
+            """
+            SELECT id, payment_intent_id, payment_status, amount
+            FROM reservations
+            WHERE payment_intent_id = %s AND user_id = %s
+            """,
+            (payment_intent_id, current_user["id"])
+        )
+        reservation = cursor.fetchone()
+        
+        if not reservation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="予約が見つかりません"
+            )
+        
+        reservation_dict = dict(reservation)
+        
+        # 既に返金済みか確認
+        if reservation_dict['payment_status'] == 'refunded':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="既に返金済みです"
+            )
+        
+        # Payment Intentを取得して返金
+        # Stripe API: Payment Intentを取得して、そのCharge IDを取得
+        payment_intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+        
+        # 決済が完了しているか確認
+        if payment_intent.status != 'succeeded':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="決済が完了していないため返金できません"
+            )
+        
+        # Charge IDを取得（返金に必要）
+        charge_id = payment_intent.latest_charge
+        if not charge_id:
+            # latest_chargeが文字列の場合
+            if isinstance(payment_intent.latest_charge, str):
+                charge_id = payment_intent.latest_charge
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Charge IDが見つかりません"
+                )
+        
+        # Refundを作成（全額返金）
+        # Stripe API: Refund.create()で返金処理を実行
+        # charge: 返金するCharge ID
+        # amount: 返金額（指定しない場合は全額返金）
+        refund = stripe.Refund.create(
+            charge=charge_id,
+            # amountを指定しない場合は全額返金
+        )
+        
+        # 予約の決済ステータスを更新
+        cursor.execute(
+            """
+            UPDATE reservations
+            SET payment_status = 'refunded'
+            WHERE id = %s
+            """,
+            (reservation_dict['id'],)
+        )
+        conn.commit()
+        
+        return {
+            'refund_id': refund.id,
+            'amount': refund.amount,
+            'status': refund.status,
+            'message': '返金が完了しました'
+        }
+    except stripe.error.StripeError as e:
+        conn.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Stripeエラー: {str(e)}"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"返金処理に失敗しました: {str(e)}"
+        )
+    finally:
+        cursor.close()
+        conn.close()
+
+
 # ========== 予約関連のAPIエンドポイント ==========
 
 @app.post("/api/reservations")
@@ -262,10 +563,11 @@ async def create_reservation(
     """
     予約を作成するエンドポイント
     
-    ログインしているユーザーが予約を作成します
+    ログインしているユーザーが予約を作成します。
+    決済が完了している必要があります（payment_intent_idが必要）。
     
     Args:
-        reservation_data: 予約情報（日付、時間、人数、特別な要望）
+        reservation_data: 予約情報（日付、時間、人数、特別な要望、メニュー、決済情報）
         current_user: 認証されたユーザー情報
     
     Returns:
@@ -275,32 +577,88 @@ async def create_reservation(
     cursor = get_db_cursor(conn)
     
     try:
+        # Payment Intentが指定されている場合、決済が完了しているか確認
+        payment_status = 'pending'
+        amount = None
+        
+        if reservation_data.payment_intent_id:
+            if not stripe.api_key:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Stripe APIキーが設定されていません"
+                )
+            
+            # Stripe API: Payment Intentの状態を確認
+            # statusが'succeeded'の場合、決済が完了している
+            payment_intent = stripe.PaymentIntent.retrieve(reservation_data.payment_intent_id)
+            
+            if payment_intent.status != 'succeeded':
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="決済が完了していません"
+                )
+            
+            payment_status = 'succeeded'
+            amount = payment_intent.amount
+        
         # 予約時間を文字列からtimeオブジェクトに変換
         reservation_time_obj = time.fromisoformat(reservation_data.reservation_time)
         
         # 予約をデータベースに挿入
         cursor.execute(
             """
-            INSERT INTO reservations (user_id, reservation_date, reservation_time, number_of_people, special_requests)
-            VALUES (%s, %s, %s, %s, %s)
-            RETURNING id, user_id, reservation_date, reservation_time, number_of_people, special_requests, status, created_at
+            INSERT INTO reservations (user_id, reservation_date, reservation_time, number_of_people, special_requests, payment_intent_id, amount, payment_status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id, user_id, reservation_date, reservation_time, number_of_people, special_requests, status, payment_intent_id, amount, payment_status, created_at
             """,
             (
                 current_user["id"],
                 reservation_data.reservation_date,
                 reservation_time_obj,
                 reservation_data.number_of_people,
-                reservation_data.special_requests
+                reservation_data.special_requests,
+                reservation_data.payment_intent_id,
+                amount,
+                payment_status
             )
         )
         
         reservation = cursor.fetchone()
+        reservation_dict = dict(reservation)
+        reservation_id = reservation_dict["id"]
+        
+        # メニューアイテムを挿入
+        if reservation_data.menu_items:
+            for menu_item in reservation_data.menu_items:
+                cursor.execute(
+                    """
+                    INSERT INTO reservation_menu_items (reservation_id, menu_id, quantity)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (reservation_id, menu_item.menu_id, menu_item.quantity)
+                )
+        
         conn.commit()
         
         # 時間を文字列に変換して返す
-        reservation_dict = dict(reservation)
         if reservation_dict["reservation_time"]:
             reservation_dict["reservation_time"] = str(reservation_dict["reservation_time"])
+        
+        # メニュー情報を取得して追加
+        if reservation_data.menu_items:
+            menu_ids = [item.menu_id for item in reservation_data.menu_items]
+            placeholders = ','.join(['%s'] * len(menu_ids))
+            cursor.execute(
+                f"""
+                SELECT m.id, m.name, m.price, rmi.quantity
+                FROM menus m
+                INNER JOIN reservation_menu_items rmi ON m.id = rmi.menu_id
+                WHERE rmi.reservation_id = %s AND m.id IN ({placeholders})
+                """,
+                [reservation_id] + menu_ids
+            )
+            menu_items = cursor.fetchall()
+            reservation_dict["menu_items"] = [dict(item) for item in menu_items]
         
         # Slackに予約確定通知を送信（非同期で実行、エラーが発生しても予約処理は続行）
         try:
@@ -311,13 +669,17 @@ async def create_reservation(
                 reservation_date=str(reservation_dict["reservation_date"]),
                 reservation_time=str(reservation_dict["reservation_time"]),
                 number_of_people=reservation_dict["number_of_people"],
-                special_requests=reservation_dict.get("special_requests")
+                special_requests=reservation_dict.get("special_requests"),
+                menu_items=reservation_dict.get("menu_items")
             )
         except Exception as e:
             # Slack通知のエラーはログに記録するが、予約処理自体は成功とする
             print(f"Slack通知送信エラー: {str(e)}")
         
         return reservation_dict
+    except HTTPException:
+        conn.rollback()
+        raise
     except Exception as e:
         conn.rollback()
         raise HTTPException(
@@ -347,7 +709,7 @@ async def get_reservations(current_user: dict = Depends(get_current_user)):
         # ユーザーの予約を取得
         cursor.execute(
             """
-            SELECT id, user_id, reservation_date, reservation_time, number_of_people, special_requests, status, created_at
+            SELECT id, user_id, reservation_date, reservation_time, number_of_people, special_requests, status, payment_intent_id, amount, payment_status, created_at
             FROM reservations
             WHERE user_id = %s
             ORDER BY reservation_date DESC, reservation_time DESC
@@ -357,12 +719,26 @@ async def get_reservations(current_user: dict = Depends(get_current_user)):
         
         reservations = cursor.fetchall()
         
-        # 時間を文字列に変換
+        # 時間を文字列に変換し、メニュー情報を追加
         result = []
         for reservation in reservations:
             reservation_dict = dict(reservation)
             if reservation_dict["reservation_time"]:
                 reservation_dict["reservation_time"] = str(reservation_dict["reservation_time"])
+            
+            # メニュー情報を取得
+            cursor.execute(
+                """
+                SELECT m.id, m.name, m.price, rmi.quantity
+                FROM menus m
+                INNER JOIN reservation_menu_items rmi ON m.id = rmi.menu_id
+                WHERE rmi.reservation_id = %s
+                """,
+                (reservation_dict["id"],)
+            )
+            menu_items = cursor.fetchall()
+            reservation_dict["menu_items"] = [dict(item) for item in menu_items]
+            
             result.append(reservation_dict)
         
         return result
@@ -384,6 +760,8 @@ async def cancel_reservation(
     """
     予約をキャンセルするエンドポイント
     
+    決済が完了している場合は自動的に返金処理も実行されます。
+    
     Args:
         reservation_id: 予約ID
         current_user: 認証されたユーザー情報
@@ -397,7 +775,11 @@ async def cancel_reservation(
     try:
         # 予約が存在し、ユーザーが所有しているか確認
         cursor.execute(
-            "SELECT * FROM reservations WHERE id = %s AND user_id = %s",
+            """
+            SELECT id, payment_intent_id, payment_status, reservation_date, reservation_time, number_of_people
+            FROM reservations
+            WHERE id = %s AND user_id = %s
+            """,
             (reservation_id, current_user["id"])
         )
         reservation = cursor.fetchone()
@@ -413,8 +795,43 @@ async def cancel_reservation(
         reservation_date = str(reservation_dict["reservation_date"])
         reservation_time = str(reservation_dict["reservation_time"]) if reservation_dict["reservation_time"] else ""
         number_of_people = reservation_dict["number_of_people"]
+        payment_intent_id = reservation_dict.get("payment_intent_id")
+        payment_status = reservation_dict.get("payment_status")
         
-        # 予約を削除
+        # 決済が完了している場合は返金処理を実行
+        refund_info = None
+        if payment_intent_id and payment_status == 'succeeded':
+            try:
+                if stripe.api_key:
+                    # Payment Intentを取得
+                    payment_intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+                    
+                    if payment_intent.status == 'succeeded':
+                        # Charge IDを取得
+                        charge_id = payment_intent.latest_charge
+                        if isinstance(charge_id, str):
+                            # 返金処理を実行
+                            refund = stripe.Refund.create(charge=charge_id)
+                            refund_info = {
+                                'refund_id': refund.id,
+                                'amount': refund.amount,
+                                'status': refund.status
+                            }
+                            
+                            # 決済ステータスを更新
+                            cursor.execute(
+                                """
+                                UPDATE reservations
+                                SET payment_status = 'refunded'
+                                WHERE id = %s
+                                """,
+                                (reservation_id,)
+                            )
+            except Exception as e:
+                # 返金処理のエラーはログに記録するが、キャンセル処理は続行
+                print(f"返金処理エラー: {str(e)}")
+        
+        # 予約を削除（CASCADEにより関連するメニューアイテムも自動削除）
         cursor.execute(
             "DELETE FROM reservations WHERE id = %s AND user_id = %s",
             (reservation_id, current_user["id"])
@@ -435,7 +852,11 @@ async def cancel_reservation(
             # Slack通知のエラーはログに記録するが、キャンセル処理自体は成功とする
             print(f"Slack通知送信エラー: {str(e)}")
         
-        return {"message": "予約がキャンセルされました", "reservation_id": reservation_id}
+        response = {"message": "予約がキャンセルされました", "reservation_id": reservation_id}
+        if refund_info:
+            response["refund"] = refund_info
+        
+        return response
     except HTTPException:
         raise
     except Exception as e:

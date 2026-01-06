@@ -4,6 +4,13 @@
 import { authenticatedFetch, API_BASE_URL } from "./auth.js";
 
 // 予約を作成する関数
+// reservationDataには以下のフィールドを含めることができます:
+// - reservation_date: 予約日
+// - reservation_time: 予約時間
+// - number_of_people: 人数
+// - special_requests: 特別な要望（任意）
+// - menu_items: メニューアイテムの配列 [{ menu_id: number, quantity: number }]
+// - payment_intent_id: StripeのPayment Intent ID
 async function createReservation(reservationData) {
     try {
         const response = await authenticatedFetch(`${API_BASE_URL}/api/reservations`, {
