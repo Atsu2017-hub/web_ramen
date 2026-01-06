@@ -1,7 +1,7 @@
 # Slack通知機能を実装するモジュール
 # Slack Webhookを使用して予約の決定・キャンセルを通知
 
-import requests  # pyright: ignore[reportMissingImports]
+import requests  # pyright: ignore[reportMissingImports, reportMissingModuleSource]
 from typing import Dict, Optional  # pyright: ignore[reportMissingImports]
 import os  # pyright: ignore[reportMissingImports]
 from dotenv import load_dotenv  # pyright: ignore[reportMissingImports]

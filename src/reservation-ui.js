@@ -7,7 +7,9 @@ import { getMenus } from "./menu.js";
 // Stripeのインスタンス（公開可能キーを使用）
 // Stripe API: クライアント側でStripe.jsを使用する際は公開可能キー（pk_で始まる）を使用
 let stripe = null;
-let cardElement = null;
+let elements = null;         // PaymentElement用のElementsインスタンス
+let paymentElement = null;   // PaymentElement本体
+let currentPaymentIntent = null; // 現在のPayment Intent情報（client_secret, payment_intent_idなど）
 let selectedMenuItems = {}; // { menuId: quantity }
 
 // Stripeを初期化する関数
@@ -19,39 +21,47 @@ function initStripe(publishableKey) {
     
     // Stripeインスタンスを作成
     stripe = Stripe(publishableKey);
+    // PaymentElement用のElementsは、Payment Intentのclient_secretが必要なため
+    // Payment Intent作成後に初期化する（initPaymentElement関数で実施）
+}
+
+// PaymentElementを初期化する関数（Payment Intent作成後に呼び出す）
+async function initPaymentElement(clientSecret) {
+    if (!stripe) {
+        throw new Error("Stripeが初期化されていません");
+    }
     
-    // Stripe Elements: カード情報入力フォームを作成
-    // Stripe API: Elements.create()でカード入力UIを作成.
-    const elements = stripe.elements();
-    cardElement = elements.create('card', {
-        style: {
-            base: {
-                fontSize: '16px',
-                color: '#424770',
-                '::placeholder': {
-                    color: '#aab7c4',
-                },
-            },
-            invalid: {
-                color: '#9e2146',
-            },
-        },
+    // 既に初期化済みなら何もしない
+    if (elements && paymentElement) {
+        return;
+    }
+    
+    // Elementsインスタンスを作成（PaymentElement用）
+    elements = stripe.elements({
+        clientSecret: clientSecret,
     });
     
-    // カード要素をDOMにマウント
-    const cardElementContainer = document.getElementById('card-element');
-    if (cardElementContainer) {
-        cardElement.mount('#card-element');
+    // PaymentElementを作成
+    paymentElement = elements.create("payment", {
+        layout: "tabs",
+    });
+    
+    // DOMにマウント（payment-elementコンテナにマウント）
+    const container = document.getElementById("payment-element");
+    if (container) {
+        // 既存の内容をクリア
+        container.innerHTML = "";
+        paymentElement.mount("#payment-element");
         
-        // 入力が変わった瞬間(1文字入力・削除など)に呼ばれる。
-        cardElement.on('change', ({error}) => {
-            const displayError = document.getElementById('card-errors');
+        // 入力エラーを表示
+        paymentElement.on("change", ({ error }) => {
+            const displayError = document.getElementById("payment-errors");
             if (error) {
                 displayError.textContent = error.message;
-                displayError.style.display = 'block';
+                displayError.style.display = "block";
             } else {
-                displayError.textContent = '';
-                displayError.style.display = 'none';
+                displayError.textContent = "";
+                displayError.style.display = "none";
             }
         });
     }
@@ -182,7 +192,10 @@ async function createPaymentIntent() {
             throw new Error(error.detail || 'Payment Intentの作成に失敗しました');
         }
         
-        return await response.json();
+        const data = await response.json();
+        // グローバルに保持して、後続のconfirmで再利用する
+        currentPaymentIntent = data;
+        return data;
     } catch (error) {
         console.error('Payment Intent作成エラー:', error);
         throw error;
@@ -222,37 +235,48 @@ async function handleReservationSubmit(event) {
         // ボタンを無効化
         submitBtn.disabled = true;
         submitBtn.textContent = '処理中...';
+
+        // まだPayment Intent / PaymentElementが用意されていなければ初期化だけ行う
+        if (!currentPaymentIntent) {
+            // Payment Intentを作成して保持
+            const paymentIntent = await createPaymentIntent();
+            // PaymentElementを初期化（決済方法入力UIを表示）
+            await initPaymentElement(paymentIntent.client_secret);
+            
+            successDiv.textContent = "お支払い情報を入力してから、もう一度「予約する」を押してください。";
+            successDiv.style.display = "block";
+            return;
+        }
         
-        // サーバ側で Payment Intentを作成
-        const paymentIntent = await createPaymentIntent();
+        // PaymentElementが未初期化の場合は初期化
+        if (!elements || !paymentElement) {
+            await initPaymentElement(currentPaymentIntent.client_secret);
+        }
         
-        // Stripe API: confirmCardPayment()で決済を完了
-        // client_secretを使用して、カード情報で決済を実行
-        const { error: stripeError, paymentIntent: confirmedPaymentIntent } = await stripe.confirmCardPayment(
-            paymentIntent.client_secret,
-            {
-                payment_method: {
-                    card: cardElement,
-                }
-            }
-        );
+        // Stripe API: PaymentElementを使って決済を実行
+        // confirmPaymentは、選択された決済方法に応じて適切なフローを実行する統一API
+        const { error: stripeError, paymentIntent: confirmedPaymentIntent } = await stripe.confirmPayment({
+            elements,
+            // リダイレクトが必要な決済方法の場合のみ自動でリダイレクト
+            redirect: "if_required",
+        });
         
         if (stripeError) {
-            throw new Error(stripeError.message || '決済に失敗しました');
+            throw new Error(stripeError.message || "決済に失敗しました");
         }
         
-        if (confirmedPaymentIntent.status !== 'succeeded') {
-            throw new Error('決済が完了していません');
+        if (!confirmedPaymentIntent || confirmedPaymentIntent.status !== "succeeded") {
+            throw new Error("決済が完了していません");
         }
         
-        // 予約を作成
+        // 予約を作成（Payment Intent IDは作成時に保持したものを使用）
         await createReservation({
             reservation_date: date,
             reservation_time: time,
             number_of_people: numberOfPeople,
             special_requests: specialRequests || null,
             menu_items: menuItems,
-            payment_intent_id: paymentIntent.payment_intent_id,
+            payment_intent_id: currentPaymentIntent.payment_intent_id,
         });
         
         // 成功メッセージを表示
@@ -264,9 +288,18 @@ async function handleReservationSubmit(event) {
         selectedMenuItems = {};
         updateMenuSelection();
         updateSelectedMenuSummary([]);
+        currentPaymentIntent = null;
+        elements = null;
+        paymentElement = null;
         
         // 予約一覧を更新
         await loadReservations();
+
+        // 予約セクションへスクロール（URLフラグメントによる簡易リダイレクト）
+        // ユーザー視点では「予約完了画面」に移動したように見える
+        if (window.location.hash !== "#reservation") {
+            window.location.hash = "reservation";
+        }
     } catch (error) {
         errorDiv.textContent = error.message;
         errorDiv.style.display = "block";

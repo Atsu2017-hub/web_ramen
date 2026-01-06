@@ -394,12 +394,14 @@ async def create_payment_intent(
         # Stripe Payment Intentを作成
         # amountは最小通貨単位（日本円の場合は円単位）
         # currency: 通貨コード（'jpy'は日本円）
-        # payment_method_types: 使用可能な決済方法（'card'はクレジットカード）
+        # automatic_payment_methods: 利用可能な決済方法を自動で有効化（PaymentElement向け）
         # metadata: 追加情報（ユーザーIDやメニュー情報などを保存可能）
         payment_intent = stripe.PaymentIntent.create(
             amount=total_amount,  # 金額（日本円の場合は円単位）
             currency='jpy',  # 通貨コード
-            payment_method_types=['card'],  # 決済方法
+            automatic_payment_methods={
+                'enabled': True,
+            },
             metadata={
                 'user_id': str(current_user['id']),
                 'user_email': current_user['email']

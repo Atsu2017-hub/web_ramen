@@ -260,13 +260,16 @@
                         <textarea id="reservation-requests" rows="3"></textarea>
                     </div>
                     
-                    <!-- Stripe決済フォーム -->
+                    <!-- Stripe決済フォーム（PaymentElement使用） -->
                     <div id="payment-section" class="payment-section" style="display: none;">
                         <h4>お支払い情報</h4>
-                        <div id="card-element" class="card-element">
-                            <!-- Stripe Elementsがここに挿入されます -->
+                        <div id="payment-element" class="payment-element">
+                            <!-- 初期状態では説明テキストのみを表示し、決済UIは表示しない -->
+                            <p id="payment-placeholder-message" class="payment-placeholder">
+                                メニューと予約内容を入力し、「予約する」を押すと決済画面に進みます。
+                            </p>
                         </div>
-                        <div id="card-errors" class="error-message" role="alert"></div>
+                        <div id="payment-errors" class="error-message" role="alert"></div>
                     </div>
                     
                     <div id="reservation-error" class="error-message" style="display: none;"></div>
