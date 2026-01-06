@@ -10,10 +10,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js" defer></script>
+    <script src="https://js.stripe.com/clover/stripe.js" defer></script>
     <script src="script.js" defer></script>
     <script type="module" src="src/chatkit.js"></script>
     <script type="module" src="src/auth-ui.js"></script>
     <script type="module" src="src/reservation-ui.js"></script>
+
 
 </head>
 <body>
@@ -237,13 +239,39 @@
                         <label for="reservation-people">人数</label>
                         <input type="number" id="reservation-people" min="1" max="10" required>
                     </div>
+                    
+                    <!-- メニュー選択セクション -->
+                    <div class="form-group">
+                        <label>メニュー選択</label>
+                        <div id="menu-selection" class="menu-selection">
+                            <p class="loading-text">メニューを読み込み中...</p>
+                        </div>
+                        <div id="selected-menu-summary" class="selected-menu-summary" style="display: none;">
+                            <h4>選択したメニュー</h4>
+                            <div id="selected-menu-list"></div>
+                            <div class="total-amount">
+                                <strong>合計金額: <span id="total-amount">¥0</span></strong>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="form-group">
                         <label for="reservation-requests">特別な要望（任意）</label>
                         <textarea id="reservation-requests" rows="3"></textarea>
                     </div>
+                    
+                    <!-- Stripe決済フォーム -->
+                    <div id="payment-section" class="payment-section" style="display: none;">
+                        <h4>お支払い情報</h4>
+                        <div id="card-element" class="card-element">
+                            <!-- Stripe Elementsがここに挿入されます -->
+                        </div>
+                        <div id="card-errors" class="error-message" role="alert"></div>
+                    </div>
+                    
                     <div id="reservation-error" class="error-message" style="display: none;"></div>
                     <div id="reservation-success" class="success-message" style="display: none;"></div>
-                    <button type="submit" class="btn btn-primary">予約する</button>
+                    <button type="submit" class="btn btn-primary" id="submit-reservation-btn">予約する</button>
                 </form>
                 
                 <!-- 予約一覧 -->

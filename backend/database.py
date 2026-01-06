@@ -62,7 +62,26 @@ def init_database():
             )
         """)
         
-        # 予約テーブルの作成
+        # メニューテーブルの作成
+        # id: 主キー（SERIAL: 自動増分）
+        # name: メニュー名
+        # description: メニューの説明
+        # price: 価格（整数、単位は円）
+        # image_url: 画像URL（任意）
+        # is_available: 利用可能かどうか（デフォルト: true）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS menus (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                description TEXT,
+                price INTEGER NOT NULL CHECK (price >= 0),
+                image_url VARCHAR(500),
+                is_available BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # 予約テーブルの作成（決済情報を追加）
         # id: 主キー（SERIAL: 自動増分）
         # user_id: ユーザーID（外部キー、usersテーブルを参照）
         # reservation_date: 予約日
@@ -70,6 +89,9 @@ def init_database():
         # number_of_people: 人数
         # special_requests: 特別な要望（任意）
         # status: 予約ステータス（pending: 保留中、confirmed: 確認済み、cancelled: キャンセル）
+        # payment_intent_id: StripeのPayment Intent ID（決済識別子）
+        # amount: 決済金額（整数、単位は円）
+        # payment_status: 決済ステータス（pending: 未決済、succeeded: 決済完了、refunded: 返金済み）
         # created_at: 予約作成日時
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS reservations (
@@ -80,9 +102,46 @@ def init_database():
                 number_of_people INTEGER NOT NULL CHECK (number_of_people > 0),
                 special_requests TEXT,
                 status VARCHAR(50) DEFAULT 'pending',
+                payment_intent_id VARCHAR(255),
+                amount INTEGER,
+                payment_status VARCHAR(50) DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        
+        # 予約メニュー関連テーブル（予約とメニューの多対多の関係）
+        # reservation_id: 予約ID（外部キー）
+        # menu_id: メニューID（外部キー）
+        # quantity: 数量
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS reservation_menu_items (
+                id SERIAL PRIMARY KEY,
+                reservation_id INTEGER NOT NULL REFERENCES reservations(id) ON DELETE CASCADE,
+                menu_id INTEGER NOT NULL REFERENCES menus(id) ON DELETE CASCADE,
+                quantity INTEGER NOT NULL CHECK (quantity > 0),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(reservation_id, menu_id)
+            )
+        """)
+        
+        # メニューの初期データを挿入（既に存在する場合はスキップ）
+        cursor.execute("SELECT COUNT(*) FROM menus")
+        menu_count = cursor.fetchone()[0]
+        
+        if menu_count == 0:
+            # メニュー初期データを挿入
+            menus_data = [
+                ("本格ラーメン", "長時間煮込んだ濃厚スープと、こだわりの麺が自慢の一杯。チャーシュー、味玉、ネギがたっぷりと盛り付けられています。", 850, "画像/ramen.png"),
+                ("特製丼", "ボリューム満点の特製丼。ご飯の上にたっぷりの具材をのせた、満足感のある一品です。", 750, "画像/don.png"),
+                ("特製唐揚げ", "ジューシーでサクサクの特製唐揚げ。秘伝のタレで味付けした、絶品サイドメニューです。", 550, "画像/karaage.png"),
+                ("ドリンク", "コーラ、オレンジジュース、お茶など、各種ドリンクをご用意しています。", 200, "画像/cola.png"),
+            ]
+            
+            cursor.executemany(
+                "INSERT INTO menus (name, description, price, image_url) VALUES (%s, %s, %s, %s)",
+                menus_data
+            )
+            print("メニューの初期データを挿入しました")
         
         # 変更をコミット（データベースに反映）
         conn.commit()
