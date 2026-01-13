@@ -11,6 +11,7 @@
 - [環境変数の設定](#環境変数の設定)
 - [使用方法](#使用方法)
 - [APIエンドポイント](#apiエンドポイント)
+- [テスト](#テスト)
 
 ## ✨ 主な機能
 
@@ -52,6 +53,8 @@
 - **psycopg2**: PostgreSQL接続ライブラリ
 - **python-dotenv**: 環境変数管理
 - **uvicorn**: ASGIサーバー
+- **pytest**: Pythonテストフレームワーク
+- **Vitest**: JavaScriptテストフレームワーク
 
 ## 📁 プロジェクト構造
 
@@ -63,7 +66,18 @@ web_ramen/
 │   ├── database.py         # データベース接続・管理
 │   ├── init_db.py          # データベース初期化
 │   ├── slack_notification.py # Slack通知機能
-│   └── requirements.txt    # Python依存パッケージ
+│   ├── requirements.txt    # Python依存パッケージ
+│   ├── requirements-test.txt # テスト用依存パッケージ
+│   ├── conftest.py         # pytest設定・フィクスチャ
+│   ├── pytest.ini          # pytest設定ファイル
+│   ├── tests/              # バックエンドテスト
+│   │   ├── test_auth.py    # 認証APIテスト
+│   │   ├── test_menu.py    # メニューAPIテスト
+│   │   ├── test_reservation.py # 予約APIテスト
+│   │   ├── test_payment.py # 決済APIテスト
+│   │   └── test_auth_module.py # 認証モジュールユニットテスト
+│   ├── run_tests.sh        # テスト実行スクリプト（Linux/macOS）
+│   └── run_tests.bat       # テスト実行スクリプト（Windows）
 ├── src/                    # フロントエンドJavaScriptモジュール
 │   ├── auth.js             # 認証API呼び出し
 │   ├── auth-ui.js          # 認証UI制御
@@ -79,6 +93,13 @@ web_ramen/
 ├── index.html              # メインHTMLファイル
 ├── style.css               # スタイルシート
 ├── script.js               # メインJavaScriptファイル
+├── package.json            # Node.js依存パッケージ（テスト用）
+├── vitest.config.js        # Vitest設定ファイル
+├── tests/                  # フロントエンドテスト
+│   ├── setup.js           # テスト環境セットアップ
+│   ├── auth.test.js       # auth.jsテスト
+│   ├── reservation.test.js # reservation.jsテスト
+│   └── menu.test.js       # menu.jsテスト
 └── README.md               # このファイル
 ```
 
@@ -299,6 +320,125 @@ npx http-server -p 8080
 - [PostgreSQL](https://www.postgresql.org/)
 
 ---
+
+## 🧪 テスト
+
+このプロジェクトには包括的なテストスイートが含まれています。
+
+### バックエンドテスト
+
+#### セットアップ
+
+1. テスト用依存パッケージをインストール:
+
+```bash
+cd backend
+pip install -r requirements-test.txt
+```
+
+2. テスト用データベースを作成（必要に応じて）:
+
+```sql
+CREATE DATABASE ramen_restaurant_test;
+```
+
+3. テスト用環境変数を設定（`.env`ファイルに追加、または環境変数として設定）:
+
+```env
+TEST_DB_HOST=localhost
+TEST_DB_PORT=5432
+TEST_DB_NAME=ramen_restaurant_test
+TEST_DB_USER=postgres
+TEST_DB_PASSWORD=your_password
+```
+
+#### テスト実行
+
+```bash
+# すべてのテストを実行
+cd backend
+pytest
+
+# 詳細な出力で実行
+pytest -v
+
+# カバレッジレポート付きで実行
+pytest --cov=. --cov-report=html
+
+# 特定のテストファイルを実行
+pytest tests/test_auth.py
+
+# Windowsの場合
+run_tests.bat
+
+# Linux/macOSの場合
+chmod +x run_tests.sh
+./run_tests.sh
+```
+
+#### テスト内容
+
+- **認証APIテスト** (`test_auth.py`): ユーザー登録、ログイン、認証エンドポイントのテスト
+- **メニューAPIテスト** (`test_menu.py`): メニュー取得機能のテスト
+- **予約APIテスト** (`test_reservation.py`): 予約作成、取得、キャンセルのテスト
+- **決済APIテスト** (`test_payment.py`): Payment Intent作成、返金処理のテスト
+- **認証モジュールテスト** (`test_auth_module.py`): 認証機能のユニットテスト
+
+### フロントエンドテスト
+
+#### セットアップ
+
+1. Node.jsパッケージをインストール:
+
+```bash
+npm install
+```
+
+#### テスト実行
+
+```bash
+# すべてのテストを実行
+npm test
+
+# UI付きで実行
+npm run test:ui
+
+# カバレッジレポート付きで実行
+npm run test:coverage
+
+# 一度だけ実行（watchモードなし）
+npm run test:run
+```
+
+#### テスト内容
+
+- **auth.test.js**: 認証機能（ログイン、登録、トークン管理）のテスト
+- **reservation.test.js**: 予約機能（作成、取得、キャンセル）のテスト
+- **menu.test.js**: メニュー取得機能のテスト
+
+### テストカバレッジ
+
+テストカバレッジレポートを生成して、コードのテストカバレッジを確認できます。
+
+**バックエンド**:
+```bash
+cd backend
+pytest --cov=. --cov-report=html
+# htmlcov/index.html を開いてレポートを確認
+```
+
+**フロントエンド**:
+```bash
+npm run test:coverage
+# coverage/index.html を開いてレポートを確認
+```
+
+### テストのベストプラクティス
+
+1. **テストは独立している**: 各テストは他のテストに依存しないように設計されています
+2. **モックの使用**: 外部API（Stripe、OpenAI、Slack）はモック化されています
+3. **テストデータベース**: 本番データベースとは別のテスト用データベースを使用します
+4. **自動クリーンアップ**: 各テスト後にデータがクリーンアップされます
 
 **注意**: 本番環境で使用する場合は、環境変数の適切な設定、セキュリティ対策、エラーハンドリングの強化などが必要です。
 
