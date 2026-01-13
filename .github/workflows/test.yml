@@ -16,9 +16,9 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          DB_USER: test_user
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_NAME: test_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: test_db
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -58,7 +58,7 @@ jobs:
           DB_PORT: 5432
           DB_NAME: test_db
           DB_USER: test_user
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
           python init_db.py
 
@@ -69,7 +69,7 @@ jobs:
           TEST_DB_PORT: 5432
           TEST_DB_NAME: test_db
           TEST_DB_USER: test_user
-          TEST_DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          TEST_DB_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
           pytest --cov-report=xml
 
