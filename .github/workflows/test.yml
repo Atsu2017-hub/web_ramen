@@ -16,9 +16,9 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: test_db
+          DB_USER: test_user
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: test_db
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -54,19 +54,24 @@ jobs:
       - name: Set up test database
         working-directory: ./backend
         env:
-          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: test_db
+          DB_USER: test_user
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
           python init_db.py
 
       - name: Run pytest
         working-directory: ./backend
         env:
-          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
-          SECRET_KEY: test-secret-key-for-ci
-          STRIPE_SECRET_KEY: sk_test_dummy_key
-          STRIPE_PUBLISHABLE_KEY: pk_test_dummy_key
+          TEST_DB_HOST: localhost
+          TEST_DB_PORT: 5432
+          TEST_DB_NAME: test_db
+          TEST_DB_USER: test_user
+          TEST_DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
-          pytest --cov=. --cov-report=xml --cov-report=term
+          pytest --cov-report=xml
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v4
