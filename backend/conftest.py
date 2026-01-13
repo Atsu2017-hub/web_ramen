@@ -21,29 +21,19 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # テスト用データベース設定（環境変数で上書き可能）
 TEST_DB_CONFIG = {
-    "DB_HOST": os.getenv("TEST_DB_HOST", "localhost"),
-    "DB_PORT": os.getenv("TEST_DB_PORT", "5432"),
-    "DB_NAME": os.getenv("TEST_DB_NAME", "ramen_restaurant_test"),
-    "DB_USER": os.getenv("TEST_DB_USER", "postgres"),
-    "DB_PASSWORD": os.getenv("TEST_DB_PASSWORD", "postgres"),
+    "host": os.getenv("DB_HOST", "localhost"),  # データベースホスト（デフォルト: localhost）
+    "port": os.getenv("DB_PORT", "5432"),  # データベースポート（デフォルト: 5432）
+    "database": os.getenv("DB_NAME", "ramen_restaurant"),  # データベース名（デフォルト: ramen_restaurant）
+    "user": os.getenv("DB_USER", "postgres"),  # データベースユーザー名（デフォルト: postgres）
+    "password": os.getenv("DB_PASSWORD", "postgres"),  # データベースパスワード（デフォルト: postgres）
 }
-
-# fixture: 「テストを実行するための『お膳立て』をしてくれる関数」
-# 例えば、データベース接続、ログイン済みクライアントの用意など。
-# これらを共通化して、必要なテストにだけ提供する仕組み
-
 
 # テスト用環境変数を設定
 # scope: session (テスト全体の開始から終了までの間)
 # sessionのほかにmodule(ファイルごと), class(クラスごと), function(関数ごと)の範囲がある。
 # autouse: このフィクスチャは自動的に実行される。
 @pytest.fixture(scope="session", autouse=True)
-def setup_test_env():
-    """テストセッション開始時に環境変数を設定"""
-    # テスト用データベース設定を適用
-    for key, value in TEST_DB_CONFIG.items():
-        os.environ[key] = value
-    
+def setup_test_env():       
     # テスト用のシークレットキー
     if "SECRET_KEY" not in os.environ:
         os.environ["SECRET_KEY"] = "test-secret-key-for-testing-only"
@@ -117,81 +107,22 @@ def client(mock_stripe, mock_openai, mock_slack): # 引数にfixtureを渡すと
 @pytest.fixture(scope="function")
 def test_db():
     """テスト用データベースのセットアップとクリーンアップ"""
-    from database import get_db_connection, get_db_cursor
-    import psycopg2
+    from database import get_db_connection, get_db_cursor, init_database
     
-    # 環境変数を一時的に上書き
-    original_env = {}
-    for key, value in TEST_DB_CONFIG.items():
-        original_env[key] = os.environ.get(key)
-        os.environ[key] = value
+    # データベースを初期化（テーブル作成とメニュー初期データの挿入）
+    init_database()
     
     # テスト用データベースに接続
     conn = None
     try:
-        conn = psycopg2.connect(**{
-            "host": TEST_DB_CONFIG["DB_HOST"],
-            "port": int(TEST_DB_CONFIG["DB_PORT"]),
-            "database": TEST_DB_CONFIG["DB_NAME"],
-            "user": TEST_DB_CONFIG["DB_USER"],
-            "password": TEST_DB_CONFIG["DB_PASSWORD"],
-        })
-        
-        # テスト用テーブルを作成
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                email VARCHAR(255) UNIQUE NOT NULL,
-                password_hash VARCHAR(255) NOT NULL,
-                name VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS menus (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                description TEXT,
-                price INTEGER NOT NULL CHECK (price >= 0),
-                image_url VARCHAR(500),
-                is_available BOOLEAN DEFAULT TRUE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS reservations (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                reservation_date DATE NOT NULL,
-                reservation_time TIME NOT NULL,
-                number_of_people INTEGER NOT NULL CHECK (number_of_people > 0),
-                special_requests TEXT,
-                status VARCHAR(50) DEFAULT 'pending',
-                payment_intent_id VARCHAR(255),
-                amount INTEGER,
-                payment_status VARCHAR(50) DEFAULT 'pending',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS reservation_menu_items (
-                id SERIAL PRIMARY KEY,
-                reservation_id INTEGER NOT NULL REFERENCES reservations(id) ON DELETE CASCADE,
-                menu_id INTEGER NOT NULL REFERENCES menus(id) ON DELETE CASCADE,
-                quantity INTEGER NOT NULL CHECK (quantity > 0),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(reservation_id, menu_id)
-            )
-        """)
-        conn.commit()
+        conn = get_db_connection()
         
         yield conn
         
     finally:
         # テストデータをクリーンアップ
         if conn:
-            cursor = conn.cursor()
+            cursor = get_db_cursor(conn)
             try:
                 cursor.execute("TRUNCATE TABLE reservation_menu_items CASCADE")
                 cursor.execute("TRUNCATE TABLE reservations CASCADE")
@@ -204,16 +135,6 @@ def test_db():
             finally:
                 cursor.close()
                 conn.close()
-        
-        # 環境変数を元に戻す
-        try:
-            for key, value in original_env.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
-        except:
-            pass  # original_envが定義されていない場合は何もしない
 
 
 @pytest.fixture

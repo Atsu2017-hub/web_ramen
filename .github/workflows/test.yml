@@ -6,6 +6,11 @@ on:
       - main
       - master
       - develop
+  push:
+    branches:
+      - main
+      - master
+      - develop
 
 jobs:
   backend-tests:
@@ -51,32 +56,15 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-test.txt
 
-      - name: Set up test database
-        working-directory: ./backend
-        env:
-          DB_HOST: localhost
-          DB_PORT: 5432
-          DB_NAME: test_db
-          DB_USER: test_user
-          DB_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-        run: |
-          python init_db.py
-
       - name: Run pytest
         working-directory: ./backend
-        env:      
+        env:
           # database.pyがインポートされる前にDB_*環境変数を設定する必要がある
           DB_HOST: localhost
           DB_PORT: 5432
           DB_NAME: test_db
           DB_USER: test_user
           DB_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          # conftest.pyが使用するTEST_DB_*環境変数
-          TEST_DB_HOST: localhost
-          TEST_DB_PORT: 5432
-          TEST_DB_NAME: test_db
-          TEST_DB_USER: test_user
-          TEST_DB_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           # その他の必要な環境変数
           SECRET_KEY: test-secret-key-for-ci
           STRIPE_SECRET_KEY: sk_test_dummy_key
