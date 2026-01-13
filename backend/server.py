@@ -197,23 +197,33 @@ async def register(user_data: UserRegister):
         dict: 作成されたユーザー情報とアクセストークン
     """
     try:
+        # 事前にメールアドレスの重複をチェック（DBエラーに依存しないようにする）
+        existing_user = get_user_by_email(user_data.email)
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="このメールアドレスは既に登録されています",
+            )
+
         # ユーザーを作成
         user = create_user(user_data.email, user_data.password, user_data.name)
-        
+
         # アクセストークンを生成
         access_token = create_access_token(data={"sub": user["email"]})
-        
+
         return {
             "user": user,
             "access_token": access_token,
-            "token_type": "bearer"
+            "token_type": "bearer",
         }
     except HTTPException:
+        # 上記で明示的に投げたエラーはそのまま返す
         raise
     except Exception as e:
+        # 想定外のエラーは 500 として返す
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"ユーザー登録に失敗しました: {str(e)}"
+            detail=f"ユーザー登録に失敗しました: {str(e)}",
         )
 
 
@@ -407,24 +417,21 @@ async def create_payment_intent(
                 'user_email': current_user['email']
             }
         )
-        
+
         # client_secret: クライアント側でStripe.jsを使用して決済を完了させるために必要な秘密鍵
         return {
-            'client_secret': payment_intent.client_secret, #必須
+            'client_secret': payment_intent.client_secret,  # 必須
             'payment_intent_id': payment_intent.id,
-            'amount': total_amount
+            'amount': total_amount,
         }
-    except stripe.error.StripeError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Stripeエラー: {str(e)}"
-        )
     except HTTPException:
+        # 上で明示的に投げたHTTPExceptionはそのまま返す
         raise
     except Exception as e:
+        # Stripe関連を含む外部APIエラーは 400 としてクライアントに返す
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Payment Intentの作成に失敗しました: {str(e)}"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"決済処理中にエラーが発生しました: {str(e)}",
         )
     finally:
         cursor.close()
@@ -534,19 +541,16 @@ async def refund_payment(
             'status': refund.status,
             'message': '返金が完了しました'
         }
-    except stripe.error.StripeError as e:
+    except HTTPException:
+        # 上で明示的に投げたHTTPExceptionはそのまま返す
+        conn.rollback()
+        raise
+    except Exception as e:
+        # Stripe関連を含む外部APIエラーは 400 としてクライアントに返す
         conn.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Stripeエラー: {str(e)}"
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"返金処理に失敗しました: {str(e)}"
+            detail=f"返金処理中にエラーが発生しました: {str(e)}"
         )
     finally:
         cursor.close()
@@ -658,7 +662,16 @@ async def create_reservation(
                 [reservation_id] + menu_ids
             )
             menu_items = cursor.fetchall()
-            reservation_dict["menu_items"] = [dict(item) for item in menu_items]
+            # テスト仕様に合わせて menu_id キーを含む形で返却する
+            reservation_dict["menu_items"] = [
+                {
+                    "menu_id": item["id"],
+                    "name": item["name"],
+                    "price": item["price"],
+                    "quantity": item["quantity"],
+                }
+                for item in menu_items
+            ]
         
         # Slackに予約確定通知を送信（非同期で実行、エラーが発生しても予約処理は続行）
         try:
@@ -737,7 +750,16 @@ async def get_reservations(current_user: dict = Depends(get_current_user)):
                 (reservation_dict["id"],)
             )
             menu_items = cursor.fetchall()
-            reservation_dict["menu_items"] = [dict(item) for item in menu_items]
+            # 一覧取得時も menu_id キーを含む形式に統一する
+            reservation_dict["menu_items"] = [
+                {
+                    "menu_id": item["id"],
+                    "name": item["name"],
+                    "price": item["price"],
+                    "quantity": item["quantity"],
+                }
+                for item in menu_items
+            ]
             
             result.append(reservation_dict)
         
