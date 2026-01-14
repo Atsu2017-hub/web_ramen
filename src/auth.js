@@ -1,7 +1,16 @@
 // 認証機能を管理するJavaScriptモジュール
 // ログイン、登録、トークン管理を行う
 
-const API_BASE_URL = "http://localhost:8000";  // バックエンドAPIのベースURL
+// バックエンドAPIのベースURL
+// - Docker + nginx で動かす場合:
+//   フロントとバックエンドは同一オリジン (http://localhost:8080) で nginx が /api を backend にプロキシするため、
+//   API_BASE_URL は空文字にして相対パスで叩く。
+// - ローカル開発で FastAPI を直接起動する場合:
+//   http://localhost:8000 を使う。
+const API_BASE_URL =
+    window.location.hostname === "localhost" && window.location.port === "8080"
+        ? ""                    // nginx 経由で同一オリジン + /api を叩く
+        : "http://localhost:8000"; // 直接バックエンドを叩く開発用
 
 // ローカルストレージからトークンを取得する関数
 function getToken() {

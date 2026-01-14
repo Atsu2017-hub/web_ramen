@@ -1,5 +1,10 @@
 async function getChatKitSessionToken() {
-  const response = await fetch("http://localhost:8000/api/chatkit/session", {
+  const apiBase =
+    window.location.hostname === "localhost" && window.location.port === "8080"
+      ? ""
+      : "http://localhost:8000";
+
+  const response = await fetch(`${apiBase}/api/chatkit/session`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -56,8 +61,13 @@ async function initChatKit() {
     widgets: { // widgetの handler="client" とすると onAction がコールバックされる。
       async onAction(action, item) {
         try {
+          const apiBase =
+            window.location.hostname === "localhost" && window.location.port === "8080"
+              ? ""
+              : "http://localhost:8000";
+
           console.log('onAction called', action, item);
-          const response = await fetch('http://localhost:8000/api/widget-action', { // responseも後で実装する
+          const response = await fetch(`${apiBase}/api/widget-action`, { // responseも後で実装する
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action, itemId: item.id }), //actionはaction: actionの省略記法。オブジェクトをJSON化

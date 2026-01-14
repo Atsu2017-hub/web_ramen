@@ -105,16 +105,51 @@ web_ramen/
 
 ## 🚀 セットアップ方法
 
-### 1. リポジトリのクローン
+このプロジェクトは、**Docker を使う方法**と、**ローカル環境に直接セットアップする方法**のどちらでも動かせます。
+
+### 1. リポジトリのクローン（共通）
 
 ```bash
 git clone <repository-url>
 cd web_ramen
 ```
 
-### 2. バックエンドのセットアップ
+---
 
-#### 2.1 Python環境の準備
+### 2. Docker を使った実行方法（推奨）
+
+Docker を使うと、PostgreSQL・FastAPI・フロントエンド（nginx）がまとめて立ち上がります。
+詳しくは `DOCKER.md` も参照してください。
+
+#### 2.1 前提条件
+
+- Docker Desktop（または Docker Engine + Docker Compose）がインストールされていること
+
+#### 2.2 `.env` の作成
+
+プロジェクトルートに `.env` を作成し、必要な環境変数を設定します（例は [環境変数の設定](#-環境変数の設定) を参照）。
+
+#### 2.3 コンテナの起動
+
+```bash
+docker-compose up -d --build
+```
+
+#### 2.4 アクセス
+
+- フロントエンド: `http://localhost:8080`
+- バックエンド API: `http://localhost:8000`
+
+`src/auth.js` / `src/chatkit.js` の `API_BASE_URL` は、
+`http://localhost:8080`（nginx 経由）でアクセスした場合は自動的に同一オリジン (`/api/...`) を使うようになっています。
+
+---
+
+### 3. ローカル環境での実行方法（非 Docker）
+
+#### 3.1 バックエンドのセットアップ
+
+##### 3.1.1 Python環境の準備
 
 ```bash
 cd backend
@@ -127,13 +162,13 @@ venv\Scripts\activate
 source venv/bin/activate
 ```
 
-#### 2.2 依存パッケージのインストール
+##### 3.1.2 依存パッケージのインストール
 
 ```bash
 pip install -r requirements.txt
 ```
 
-#### 2.3 PostgreSQLデータベースのセットアップ
+##### 3.1.3 PostgreSQLデータベースのセットアップ
 
 PostgreSQLをインストールし、データベースを作成します。
 
@@ -141,13 +176,13 @@ PostgreSQLをインストールし、データベースを作成します。
 CREATE DATABASE ramen_restaurant;
 ```
 
-#### 2.4 データベースの初期化
+##### 3.1.4 データベースの初期化
 
 ```bash
 python init_db.py
 ```
 
-### 3. フロントエンドのセットアップ
+#### 3.2 フロントエンドのセットアップ
 
 フロントエンドは静的ファイルのため、特別なビルドプロセスは不要です。Webサーバーで配信するか、直接HTMLファイルを開いて使用できます。
 
@@ -187,7 +222,15 @@ SLACK_WEBHOOK_URL=https://hooks.slack.com/services/your/webhook/url
 
 ## 📖 使用方法
 
-### バックエンドサーバーの起動
+### 1. Docker を使う場合
+
+上記の「Docker を使った実行方法」でコンテナを起動した後、ブラウザで次にアクセスします。
+
+- フロントエンド: `http://localhost:8080`
+
+### 2. ローカル環境で動かす場合
+
+#### 2.1 バックエンドサーバーの起動
 
 ```bash
 cd backend
@@ -196,11 +239,13 @@ uvicorn server:app --reload --host 0.0.0.0 --port 8000
 
 サーバーは `http://localhost:8000` で起動します。
 
-### フロントエンドの起動
+#### 2.2 フロントエンドの起動
 
-#### 方法1: ローカルWebサーバーを使用（推奨）
+**方法1: ローカルWebサーバーを使用（推奨）**
 
 ```bash
+# プロジェクトルートで実行
+
 # Python 3の場合
 python -m http.server 8080
 
@@ -210,7 +255,7 @@ npx http-server -p 8080
 
 ブラウザで `http://localhost:8080` にアクセスします。
 
-#### 方法2: 直接ファイルを開く
+**方法2: 直接ファイルを開く**
 
 `index.html` をブラウザで直接開くことも可能ですが、CORS制限により一部機能が制限される場合があります。
 
