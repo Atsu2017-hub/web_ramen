@@ -32,11 +32,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-backend-
 
-      - name: Start services with Docker Compose
-        run: |
-          docker compose up -d db
-          timeout 60 bash -c 'until docker compose exec -T db pg_isready -U test_user; do sleep 2; done'
-
       - name: Run backend tests
         run: |
           docker compose --profile test run --rm backend-test
@@ -100,14 +95,11 @@ jobs:
       - name: Start all services
         run: |
           docker compose up -d
-          timeout 120 bash -c 'until docker compose ps | grep -q "Up (healthy)"; do sleep 2; done'
 
       - name: Health check
         run: |
-          # バックエンドは nginx 経由でのみアクセスされることを確認するため、
-          # フロント（nginx）に対して /api/health を叩き、その中で via_nginx が true であることを確認する
-          curl -f http://localhost:8080 || exit 1
-          curl -sSf http://localhost:8080/api/health | jq -e '.via_nginx == true' > /dev/null
+          timeout 60 bash -c 'until curl -f http://localhost:8080 > /dev/null 2>&1; do sleep 2; done'
+          timeout 60 bash -c 'until curl -sSf http://localhost:8080/api/health | jq -e ".via_nginx == true" > /dev/null 2>&1; do sleep 2; done'
 
       - name: Cleanup
         if: always()

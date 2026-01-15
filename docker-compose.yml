@@ -13,7 +13,7 @@ services:
       # 開発環境: データ永続化用ボリューム（開発データは保持）
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U test_user"]
       interval: 10s
       timeout: 5s
       retries: 5
