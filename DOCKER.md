@@ -168,8 +168,9 @@ docker-compose exec db psql -U postgres -d ramen_restaurant
 
 ### ファイル構成
 
-- **docker-compose.yml**: 開発環境用（volumes でコードをマウント、ホットリロード有効）
+- **docker-compose.yml**: 開発環境およびCIテスト用（volumes でコードをマウント、ホットリロード有効）
 - **docker-compose.prod.yml**: 本番環境用（volumes なし、コードはイメージに含まれる）
+- **docker-compose.override.yml.example**: 開発環境用のオーバーライドファイル例（個人設定用）
 
 ### サービス
 
@@ -181,14 +182,16 @@ docker-compose exec db psql -U postgres -d ramen_restaurant
 
 ### 開発環境と本番環境の違い
 
-| 項目 | 開発環境 | 本番環境 |
-|------|---------|---------|
-| ファイル | `docker-compose.yml` | `docker-compose.prod.yml` |
-| コードマウント | volumes でマウント | イメージに含まれる |
-| ホットリロード | 有効（`--reload`） | 無効 |
-| 自動再起動 | なし | `restart: unless-stopped` |
-| ネットワーク名 | `ramen_network` | `ramen_network_prod` |
-| ボリューム名 | `postgres_data` | `postgres_data_prod` |
+| 項目 | 開発環境 | 本番環境 | CI/CD環境 |
+|------|---------|---------|-----------|
+| ファイル | `docker-compose.yml` | `docker-compose.prod.yml` | `docker-compose.yml`（`test`プロファイルを使用） |
+| コードマウント | volumes でマウント | イメージに含まれる | volumes でマウント |
+| ホットリロード | 有効（`--reload`） | 無効 | 無効 |
+| 自動再起動 | なし | `restart: unless-stopped` | なし |
+| ネットワーク名 | `ramen_network` | `ramen_network_prod` | `ramen_network` |
+| ボリューム名 | `postgres_data` | `postgres_data_prod` | `postgres_data` |
+| ポート公開 | 公開 | 公開（DBは内部のみ） | 非公開（基本的に内部のみ、必要に応じて公開） |
+| データ永続化 | あり | あり | あり（ジョブ終了時に `down -v` で削除可能） |
 
 ### ネットワーク
 
@@ -201,6 +204,57 @@ docker-compose exec db psql -U postgres -d ramen_restaurant
 
 - **開発環境**: `postgres_data` - PostgreSQLのデータ永続化用
 - **本番環境**: `postgres_data_prod` - PostgreSQLのデータ永続化用（開発環境とは別）
+- **CI/CD環境**: `postgres_test_data` - テスト用の一時ボリューム（テスト終了後に削除）
+
+### docker-compose override の使用
+
+開発環境で個人設定を追加したい場合は、`docker-compose.override.yml.example`を参考に`docker-compose.override.yml`を作成してください。
+
+```bash
+# オーバーライドファイルの作成
+cp docker-compose.override.yml.example docker-compose.override.yml
+
+# 通常通り起動（overrideファイルは自動的に読み込まれる）
+docker-compose up -d
+```
+
+`docker-compose.override.yml`は`.gitignore`に含まれているため、個人設定をGitにコミットせずに済みます。
+
+## 🔄 CI/CD環境（Github Actions）
+
+### テストの実行
+
+Github ActionsおよびローカルのCI再現では、`docker-compose.yml` をそのまま使用し、`test` プロファイル付きのサービスでテストを実行します。
+
+```bash
+# ローカルでCI/CD環境を再現する場合（バックエンドテスト）
+docker-compose up -d db
+docker-compose --profile test run --rm backend-test
+docker-compose down -v
+
+# ローカルでCI/CD環境を再現する場合（フロントエンドテスト）
+docker-compose --profile test run --rm frontend-test
+docker-compose down -v
+
+# すべてのサービスを立ち上げて動作確認（統合テスト相当）
+docker-compose up -d
+curl -f http://localhost:8000/health
+curl -f http://localhost:8080
+docker-compose down -v
+```
+
+### デプロイの自動化
+
+`deploy.yml`ワークフローにより、main/masterブランチへのpush時に自動的にデプロイが実行されます。
+
+**必要なGithub Secrets:**
+- `PROD_DB_USER`, `PROD_DB_PASSWORD`, `PROD_DB_NAME`
+- `PROD_SECRET_KEY`
+- `PROD_STRIPE_SECRET_KEY`, `PROD_STRIPE_PUBLISHABLE_KEY`
+- `PROD_OPENAI_API_KEY`
+- `PROD_SLACK_WEBHOOK_URL`
+
+詳細は`.github/workflows/deploy.yml`を参照してください。
 
 ## 🐛 トラブルシューティング
 

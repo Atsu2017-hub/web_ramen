@@ -1,0 +1,112 @@
+services:
+  # PostgreSQLデータベース
+  db:
+    image: postgres:15
+    container_name: ramen_db_prod
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    # 本番環境: ポートは外部公開しない（内部ネットワークのみ）
+    expose:
+      - "5432"
+    volumes:
+      # 本番環境: データ永続化用ボリューム（別名で分離）
+      - postgres_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ramen_network_prod
+    restart: unless-stopped
+    # 本番環境: リソース制限を設定（オプション）
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # バックエンドAPI（FastAPI）
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # 本番環境: ビルド引数で最適化
+      args:
+        - BUILD_ENV=production
+    container_name: ramen_backend_prod
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      SECRET_KEY: ${SECRET_KEY}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
+    # 本番環境: 環境変数ファイルを使用（推奨）
+    env_file:
+      - .env.prod
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    # 本番環境: volumesを使用しない（コードはイメージに含まれる）
+    # これにより、デプロイ時の一貫性が保証される
+    command: >
+      sh -c "
+        echo 'データベースの接続を待機中...' &&
+        sleep 5 &&
+        python init_db.py &&
+        uvicorn server:app --host 0.0.0.0 --port 8000 --workers 4
+      "
+    networks:
+      - ramen_network_prod
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+  # フロントエンド用のnginx
+  frontend:
+    image: nginx:alpine
+    container_name: ramen_frontend_prod
+    ports:
+      - "8080:80"
+    volumes:
+      # 本番環境: ビルド済みの静的ファイルのみをマウント
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./dist:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+    networks:
+      - ramen_network_prod
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+volumes:
+  postgres_data_prod:
+
+networks:
+  ramen_network_prod:
+    driver: bridge

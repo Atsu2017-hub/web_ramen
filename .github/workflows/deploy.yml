@@ -1,0 +1,182 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload frontend build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+          retention-days: 7
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    environment:
+      name: production
+      url: https://your-production-domain.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download frontend build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy with Docker Compose
+        run: |
+          # 本番環境の環境変数ファイルを作成（secretsから）
+          echo "DB_USER=${{ secrets.PROD_DB_USER }}" > .env.prod
+          echo "DB_PASSWORD=${{ secrets.PROD_DB_PASSWORD }}" >> .env.prod
+          echo "DB_NAME=${{ secrets.PROD_DB_NAME }}" >> .env.prod
+          echo "SECRET_KEY=${{ secrets.PROD_SECRET_KEY }}" >> .env.prod
+          echo "STRIPE_SECRET_KEY=${{ secrets.PROD_STRIPE_SECRET_KEY }}" >> .env.prod
+          echo "STRIPE_PUBLISHABLE_KEY=${{ secrets.PROD_STRIPE_PUBLISHABLE_KEY }}" >> .env.prod
+          echo "OPENAI_API_KEY=${{ secrets.PROD_OPENAI_API_KEY }}" >> .env.prod
+          echo "SLACK_WEBHOOK_URL=${{ secrets.PROD_SLACK_WEBHOOK_URL }}" >> .env.prod
+          
+          # 本番環境用のdocker-composeでデプロイ
+          docker-compose -f docker-compose.prod.yml pull
+          docker-compose -f docker-compose.prod.yml up -d --build
+          
+          # デプロイ後のヘルスチェック
+          sleep 10
+          curl -f http://localhost:8000/health || exit 1
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f .env.prod
+
+  # ステージング環境へのデプロイ（オプション）
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging'
+    environment:
+      name: staging
+      url: https://staging.your-domain.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download frontend build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy to staging
+        run: |
+          # ステージング環境の環境変数ファイルを作成
+          echo "DB_USER=${{ secrets.STAGING_DB_USER }}" > .env.staging
+          echo "DB_PASSWORD=${{ secrets.STAGING_DB_PASSWORD }}" >> .env.staging
+          echo "DB_NAME=${{ secrets.STAGING_DB_NAME }}" >> .env.staging
+          echo "SECRET_KEY=${{ secrets.STAGING_SECRET_KEY }}" >> .env.staging
+          echo "STRIPE_SECRET_KEY=${{ secrets.STAGING_STRIPE_SECRET_KEY }}" >> .env.staging
+          echo "STRIPE_PUBLISHABLE_KEY=${{ secrets.STAGING_STRIPE_PUBLISHABLE_KEY }}" >> .env.staging
+          echo "OPENAI_API_KEY=${{ secrets.STAGING_OPENAI_API_KEY }}" >> .env.staging
+          echo "SLACK_WEBHOOK_URL=${{ secrets.STAGING_SLACK_WEBHOOK_URL }}" >> .env.staging
+          
+          docker-compose -f docker-compose.prod.yml --env-file .env.staging up -d --build
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f .env.staging
