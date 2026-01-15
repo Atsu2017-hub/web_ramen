@@ -111,7 +111,6 @@ services:
       - /usr/share/nginx/html/node_modules
       - /usr/share/nginx/html/backend
       - /usr/share/nginx/html/.git
-      - /usr/share/nginx/html/dist
     depends_on:
       - backend
     networks:
