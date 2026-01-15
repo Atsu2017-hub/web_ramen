@@ -168,7 +168,8 @@ docker-compose exec db psql -U postgres -d ramen_restaurant
 
 ### ファイル構成
 
-- **docker-compose.yml**: 開発環境およびCIテスト用（volumes でコードをマウント、ホットリロード有効）
+- **docker-compose.yml**: 開発環境用（volumes でコードをマウント、ホットリロード有効）
+- **docker-compose.test.yml**: テスト環境用（CI/CDテスト実行用）
 - **docker-compose.prod.yml**: 本番環境用（volumes なし、コードはイメージに含まれる）
 - **docker-compose.override.yml.example**: 開発環境用のオーバーライドファイル例（個人設定用）
 
@@ -184,12 +185,12 @@ docker-compose exec db psql -U postgres -d ramen_restaurant
 
 | 項目 | 開発環境 | 本番環境 | CI/CD環境 |
 |------|---------|---------|-----------|
-| ファイル | `docker-compose.yml` | `docker-compose.prod.yml` | `docker-compose.yml`（`test`プロファイルを使用） |
+| ファイル | `docker-compose.yml` | `docker-compose.prod.yml` | `docker-compose.test.yml` |
 | コードマウント | volumes でマウント | イメージに含まれる | volumes でマウント |
 | ホットリロード | 有効（`--reload`） | 無効 | 無効 |
 | 自動再起動 | なし | `restart: unless-stopped` | なし |
-| ネットワーク名 | `ramen_network` | `ramen_network_prod` | `ramen_network` |
-| ボリューム名 | `postgres_data` | `postgres_data_prod` | `postgres_data` |
+| ネットワーク名 | `ramen_network` | `ramen_network_prod` | `ramen_test_network` |
+| ボリューム名 | `postgres_data` | `postgres_data_prod` | `postgres_test_data` |
 | ポート公開 | 公開 | 公開（DBは内部のみ） | 非公開（基本的に内部のみ、必要に応じて公開） |
 | データ永続化 | あり | あり | あり（ジョブ終了時に `down -v` で削除可能） |
 
@@ -204,7 +205,7 @@ docker-compose exec db psql -U postgres -d ramen_restaurant
 
 - **開発環境**: `postgres_data` - PostgreSQLのデータ永続化用
 - **本番環境**: `postgres_data_prod` - PostgreSQLのデータ永続化用（開発環境とは別）
-- **CI/CD環境**: `postgres_test_data` - テスト用の一時ボリューム（テスト終了後に削除）
+- **テスト環境**: `postgres_test_data` - テスト用の一時ボリューム（テスト終了後に削除）
 
 ### docker-compose override の使用
 
@@ -224,23 +225,23 @@ docker-compose up -d
 
 ### テストの実行
 
-Github ActionsおよびローカルのCI再現では、`docker-compose.yml` をそのまま使用し、`test` プロファイル付きのサービスでテストを実行します。
+Github ActionsおよびローカルのCI再現では、`docker-compose.test.yml` を使用してテストを実行します。
 
 ```bash
 # ローカルでCI/CD環境を再現する場合（バックエンドテスト）
-docker-compose up -d db
-docker-compose --profile test run --rm backend-test
-docker-compose down -v
+docker compose -f docker-compose.test.yml up -d db
+docker compose -f docker-compose.test.yml run --rm backend-test
+docker compose -f docker-compose.test.yml down -v
 
 # ローカルでCI/CD環境を再現する場合（フロントエンドテスト）
-docker-compose --profile test run --rm frontend-test
-docker-compose down -v
+docker compose -f docker-compose.test.yml run --rm frontend-test
+docker compose -f docker-compose.test.yml down -v
 
 # すべてのサービスを立ち上げて動作確認（統合テスト相当）
-docker-compose up -d
+docker compose up -d
 curl -f http://localhost:8000/health
 curl -f http://localhost:8080
-docker-compose down -v
+docker compose down -v
 ```
 
 ### デプロイの自動化

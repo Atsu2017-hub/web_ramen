@@ -13,7 +13,7 @@ services:
       # 開発環境: データ永続化用ボリューム（開発データは保持）
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U test_user"]
+      test: ["CMD-SHELL", "pg_isready -U test_user -d test_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -58,45 +58,6 @@ services:
     networks:
       - ramen_network
 
-  # バックエンドテスト用サービス
-  backend-test:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: ramen_backend_test
-    environment:
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: test_db
-      DB_USER: test_user
-      DB_PASSWORD: test_password
-      SECRET_KEY: test-secret-key-for-ci
-      STRIPE_SECRET_KEY: sk_test_dummy_key
-      STRIPE_PUBLISHABLE_KEY: pk_test_dummy_key
-      OPENAI_API_KEY: test_openai_key
-      SLACK_WEBHOOK_URL: ""
-    expose:
-      - "8000"
-    depends_on:
-      db:
-        condition: service_healthy
-    volumes:
-      # テスト環境: ソースコードをマウント
-      - ./backend:/app
-      - /app/__pycache__
-      - /app/.pytest_cache
-    command: >
-      sh -c "
-        echo 'データベースの接続を待機中...' &&
-        sleep 5 &&
-        python init_db.py &&
-        pytest --cov-report=xml --cov-report=html
-      "
-    networks:
-      - ramen_network
-    profiles:
-      - test
-
   # フロントエンド用のnginx
   frontend:
     image: nginx:alpine
@@ -111,24 +72,6 @@ services:
       - backend
     networks:
       - ramen_network
-
-  # フロントエンドテスト用サービス
-  frontend-test:
-    image: node:20-alpine
-    container_name: ramen_frontend_test
-    working_dir: /app
-    environment:
-      NODE_ENV: test
-    volumes:
-      # テスト環境: ソースコードをマウント
-      - ./:/app
-      # node_modulesはコンテナ内で管理（OS依存性の回避）
-      - /app/node_modules
-    command: sh -c "rm -rf /app/coverage && npm ci && npm run test:run -- --coverage"
-    networks:
-      - ramen_network
-    profiles:
-      - test
 
 volumes:
   postgres_data:
