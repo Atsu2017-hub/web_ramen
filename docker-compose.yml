@@ -4,9 +4,9 @@ services:
     image: postgres:15
     container_name: ramen_db
     environment:
-      - POSTGRES_USER: test_user
-      - POSTGRES_PASSWORD: test_password
-      - POSTGRES_DB: test_db
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: test_db
     expose:
       - "5432"
     volumes:
