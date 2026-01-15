@@ -129,7 +129,6 @@ services:
       - ./:/app
       # node_modulesはコンテナ内で管理（OS依存性の回避）
       - /app/node_modules
-      - /app/coverage
     command: sh -c "rm -rf /app/coverage && npm ci && npm run test:run -- --coverage"
     networks:
       - ramen_network
