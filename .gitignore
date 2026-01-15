@@ -19,6 +19,10 @@ htmlcov/
 # 環境変数
 .env
 .env.local
+.env.*
+!.env.example
+# docker-compose override（個人設定用）
+docker-compose.override.yml
 
 # Node.js
 node_modules/

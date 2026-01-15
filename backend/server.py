@@ -49,6 +49,34 @@ stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 # HTTPBearerを使用してJWTトークンの認証を行う
 security = HTTPBearer()
 
+# ヘルスチェックエンドポイント（CI/CDやデプロイ時の確認用）
+@app.get("/health")
+async def health_check():
+    """アプリケーションのヘルスチェック（内部／直接アクセス用）"""
+    return {"status": "healthy", "service": "ramen-restaurant-api"}
+
+
+@app.get("/api/health")
+async def api_health_check(request: Request):
+    """
+    nginx経由かどうかを判定するためのヘルスチェックエンドポイント。
+    nginxからのプロキシであれば X-Real-IP / X-Forwarded-For が付与される。
+    """
+    x_real_ip = request.headers.get("x-real-ip")
+    x_forwarded_for = request.headers.get("x-forwarded-for")
+    x_forwarded_proto = request.headers.get("x-forwarded-proto")
+
+    via_nginx = any([x_real_ip, x_forwarded_for, x_forwarded_proto])
+
+    return {
+        "status": "healthy",
+        "service": "ramen-restaurant-api",
+        "via_nginx": via_nginx,
+        "x_real_ip": x_real_ip,
+        "x_forwarded_for": x_forwarded_for,
+        "x_forwarded_proto": x_forwarded_proto,
+    }
+
 # アプリケーション起動時にデータベースを初期化
 
 # @app.on_event("startup")

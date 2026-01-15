@@ -1,0 +1,84 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+*.egg-info/
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+htmlcov/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# テスト
+tests/
+coverage/
+.nyc_output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+.docker/
+
+# 環境変数
+.env
+.env.local
+.env.*.local
+.env.*
+!.env.example
+
+# ビルド成果物
+dist/
+build/
+*.log
+
+# ドキュメント
+README.md
+*.md
+!DOCKER.md
+docs/
+
+# その他
+other/
+*.bak
+*.tmp
+.cache/

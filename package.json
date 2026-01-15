@@ -7,7 +7,9 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "build": "node scripts/build.js",
+    "build:clean": "node scripts/build.js --clean"
   },
   "devDependencies": {
     "vitest": "^2.1.3",
