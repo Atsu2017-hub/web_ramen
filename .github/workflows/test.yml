@@ -34,12 +34,12 @@ jobs:
 
       - name: Start services with Docker Compose
         run: |
-          docker-compose up -d db
-          timeout 60 bash -c 'until docker-compose exec -T db pg_isready -U test_user; do sleep 2; done'
+          docker compose up -d db
+          timeout 60 bash -c 'until docker compose exec -T db pg_isready -U test_user; do sleep 2; done'
 
       - name: Run backend tests
         run: |
-          docker-compose --profile test run --rm backend-test
+          docker compose --profile test run --rm backend-test
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v4
@@ -53,7 +53,7 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          docker-compose down -v
+          docker compose down -v
 
   frontend-tests:
     name: Frontend Tests (JavaScript/vitest with Docker Compose)
@@ -68,7 +68,7 @@ jobs:
 
       - name: Run frontend tests
         run: |
-          docker-compose --profile test run --rm frontend-test
+          docker compose --profile test run --rm frontend-test
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v4
@@ -82,7 +82,7 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          docker-compose down -v
+          docker compose down -v
 
   integration-tests:
     name: Integration Tests
@@ -99,8 +99,8 @@ jobs:
 
       - name: Start all services
         run: |
-          docker-compose up -d
-          timeout 120 bash -c 'until docker-compose ps | grep -q "Up (healthy)"; do sleep 2; done'
+          docker compose up -d
+          timeout 120 bash -c 'until docker compose ps | grep -q "Up (healthy)"; do sleep 2; done'
 
       - name: Health check
         run: |
@@ -112,4 +112,4 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          docker-compose down -v
+          docker compose down -v

@@ -120,8 +120,8 @@ jobs:
           echo "SLACK_WEBHOOK_URL=${{ secrets.PROD_SLACK_WEBHOOK_URL }}" >> .env.prod
           
           # 本番環境用のdocker-composeでデプロイ
-          docker-compose -f docker-compose.prod.yml pull
-          docker-compose -f docker-compose.prod.yml up -d --build
+          docker compose -f docker-compose.prod.yml pull
+          docker compose -f docker-compose.prod.yml up -d --build
           
           # デプロイ後のヘルスチェック
           sleep 10
@@ -174,7 +174,10 @@ jobs:
           echo "OPENAI_API_KEY=${{ secrets.STAGING_OPENAI_API_KEY }}" >> .env.staging
           echo "SLACK_WEBHOOK_URL=${{ secrets.STAGING_SLACK_WEBHOOK_URL }}" >> .env.staging
           
-          docker-compose -f docker-compose.prod.yml --env-file .env.staging up -d --build
+          # 環境変数ファイルを.envとしてコピー（docker composeは.envを自動読み込み）
+          cp .env.staging .env
+          docker compose -f docker-compose.prod.yml up -d --build
+          rm -f .env
 
       - name: Cleanup
         if: always()
