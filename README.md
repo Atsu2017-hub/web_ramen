@@ -128,7 +128,6 @@ Docker を使うと、PostgreSQL・FastAPI・フロントエンド（nginx）が
 #### 2.2 `.env` の作成
 
 プロジェクトルートに `.env` を作成し、必要な環境変数を設定します（例は [環境変数の設定](#-環境変数の設定) を参照）。
-docker-compose.ymlの環境変数を設定を${...}に変更し、.envファイルから読みだすように変更してください。
 
 #### 2.3 `docker-compose.yml` の環境変数について
 開発用途の `docker-compose.yml` も、本番用途の `docker-compose.prod.yml` と同様に、
